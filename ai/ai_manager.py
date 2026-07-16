@@ -8,7 +8,7 @@ import time
 import json
 import re
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 
 from ai.personalities import TWILIGHT_PERSONALITY
@@ -73,6 +73,30 @@ def is_location_unsupported_error(error):
     return (
         "User location is not supported" in text
         or "FAILED_PRECONDITION" in text
+    )
+
+
+MOSCOW_TZ = timezone(timedelta(hours=3))
+
+
+def get_moscow_time_context():
+    now = datetime.now(MOSCOW_TZ)
+    hour = now.hour
+
+    if 5 <= hour < 12:
+        day_part = "утро"
+    elif 12 <= hour < 18:
+        day_part = "день"
+    elif 18 <= hour < 23:
+        day_part = "вечер"
+    else:
+        day_part = "ночь"
+
+    return (
+        f"Сейчас в Москве: {now:%d.%m.%Y %H:%M}. "
+        f"Время суток: {day_part}. "
+        "Используй это как реальное текущее время. "
+        "Не говори 'день', 'вечер', 'ночь' или 'утро', если это противоречит этому времени."
     )
 
 
@@ -402,6 +426,9 @@ def ask_gemini(
 ХАРАКТЕР
 ========================
 
+{get_moscow_time_context()}
+
+
 {TWILIGHT_PERSONALITY}
 
 
@@ -562,6 +589,8 @@ def ask_gemini_short_fallback(user_message: str):
     prompt = f"""
 Ты — Искорка из My Little Pony.
 
+{get_moscow_time_context()}
+
 Ответь на сообщение пользователя коротко, живо и по-человечески.
 Без длинных объяснений, без сценических действий в звездочках, без фразы про то, что у тебя "сбилась мысль".
 
@@ -599,6 +628,9 @@ def ask_openai_fallback(
 Ты просто разговариваешь с пользователем в Telegram.
 
 ХАРАКТЕР:
+{get_moscow_time_context()}
+
+
 {TWILIGHT_PERSONALITY}
 
 ПАМЯТЬ:
@@ -676,6 +708,8 @@ def ask_gemini_with_image(
 
 Посмотри на изображение или превью видео и ответь естественно, как живой собеседник.
 
+{get_moscow_time_context()}
+
 {LIVE_STYLE_RULES}
 
 Не описывай картинку сухо как технический анализ.
@@ -751,6 +785,8 @@ def ask_gemini_with_images(
 Пользователь отправил несколько фотографий одним альбомом.
 
 Посмотри на все изображения вместе и ответь одним сообщением, как живой собеседник.
+
+{get_moscow_time_context()}
 
 {LIVE_STYLE_RULES}
 
@@ -835,6 +871,8 @@ def ask_gemini_random_message(
 
 
 Просто говори естественно.
+
+{get_moscow_time_context()}
 
 {LIVE_STYLE_RULES}
 
