@@ -223,6 +223,41 @@ PREMATURE_FAREWELL_PHRASES = [
 ]
 
 
+TEMPLATE_PHRASES = {
+    "проверить границы моего терпения": "смущать меня",
+    "границы моего терпения": "меня смущать",
+    "довести до ручки": "добить",
+    "вывести меня из зоны комфорта": "смущать меня",
+    "сбить меня с толку": "заставить меня зависнуть",
+    "сбил меня с толку": "заставил меня зависнуть",
+    "сбил с толку": "заставил зависнуть",
+    "окончательно сбить с толку": "добить",
+    "окончательно сбил с толку": "добил",
+    "окончательно заставил зависнуть": "добил",
+    "официально в шоке": "зависла",
+    "общение приносит удовольствие": "приятно общаться",
+    "диалоги складываются": "получается разговаривать",
+    "живое общение": "разговор",
+    "древних свитков": "сложной задачки",
+    "магией дедукции": "догадками",
+}
+
+TIME_CONTEXT_REPLACEMENTS = {
+    "Как проходит день?": "Как ты сейчас?",
+    "как проходит день?": "как ты сейчас?",
+    "Как день проходит?": "Как ты сейчас?",
+    "как день проходит?": "как ты сейчас?",
+    "Как проходит твой день?": "Как ты сейчас?",
+    "как проходит твой день?": "как ты сейчас?",
+    "вечер только начинается": "ночь еще не закончилась",
+    "Вечер только начинается": "Ночь еще не закончилась",
+    "Как проходит вечер?": "Как ты сейчас?",
+    "как проходит вечер?": "как ты сейчас?",
+    "Как вечер проходит?": "Как ты сейчас?",
+    "как вечер проходит?": "как ты сейчас?",
+}
+
+
 def is_user_saying_goodbye(user_message):
     if not user_message:
         return False
@@ -233,6 +268,55 @@ def is_user_saying_goodbye(user_message):
         marker in lowered
         for marker in FAREWELL_MARKERS
     )
+
+
+def current_day_part():
+    return get_moscow_time_context().split("Время суток: ", 1)[-1].split(".", 1)[0]
+
+
+def remove_template_phrases(answer):
+    cleaned = answer
+
+    for old, new in TEMPLATE_PHRASES.items():
+        cleaned = cleaned.replace(old, new)
+        cleaned = cleaned.replace(old.capitalize(), new.capitalize())
+
+    return cleaned
+
+
+def fix_time_contradictions(answer):
+    cleaned = answer
+    day_part = current_day_part()
+
+    if day_part != "день":
+        for old, new in TIME_CONTEXT_REPLACEMENTS.items():
+            cleaned = cleaned.replace(old, new)
+
+    if day_part == "ночь":
+        cleaned = cleaned.replace(
+            "сегодня днем",
+            "сегодня"
+        )
+        cleaned = cleaned.replace(
+            "Сейчас днем",
+            "Сейчас"
+        )
+
+    return cleaned
+
+
+def self_check_answer(answer, user_message=None):
+    checked = remove_template_phrases(answer)
+    checked = fix_time_contradictions(checked)
+    checked = remove_premature_farewell(
+        checked,
+        user_message
+    )
+
+    while "\n\n\n" in checked:
+        checked = checked.replace("\n\n\n", "\n\n")
+
+    return checked.strip()
 
 
 def remove_premature_farewell(answer, user_message):
@@ -297,7 +381,7 @@ def clean_answer_style(answer, user_message=None):
     while "\n\n\n" in cleaned:
         cleaned = cleaned.replace("\n\n\n", "\n\n")
 
-    cleaned = remove_premature_farewell(
+    cleaned = self_check_answer(
         cleaned,
         user_message
     )
