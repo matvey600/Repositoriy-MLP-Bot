@@ -32,6 +32,14 @@ if os.getenv("OPENAI_API_KEY"):
 
 
 MODEL = "gemini-3.1-flash-lite"
+GEMINI_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        "GEMINI_MODELS",
+        "gemini-3.1-flash-lite,gemini-3.1-flash-lite-preview,gemini-2.5-flash-lite,gemini-2.5-flash"
+    ).split(",")
+    if model.strip()
+]
 OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-5-mini")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +74,50 @@ def is_location_unsupported_error(error):
         or "FAILED_PRECONDITION" in text
     )
 
+
+def generate_gemini_content(contents, source, user_message=None):
+    last_error = None
+
+    for model in GEMINI_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents
+            )
+
+            if response.text:
+                return clean_answer_style(
+                    response.text.strip()
+                )
+
+            log_ai_error(
+                f"{source}_empty_response",
+                f"model={model}; response={repr(response)}",
+                user_message
+            )
+
+        except Exception as e:
+            last_error = e
+
+            log_ai_error(
+                f"{source}_exception",
+                f"model={model}; error={repr(e)}",
+                user_message
+            )
+
+            print(
+                f"Gemini {source} ошибка ({model}):",
+                e
+            )
+
+            if is_location_unsupported_error(e):
+                return None
+
+    if last_error:
+        return None
+
+    return None
+
 CLICHE_REPLACEMENTS = {
     "дело житейское": "бывает",
     "тайна «ой» раскрыта": "понятно",
@@ -88,6 +140,25 @@ USER_GENDER_REPLACEMENTS = {
     "ты готова": "ты готов",
     "ты права": "ты прав",
     "ты смогла": "ты смог",
+    "ты озадачила": "ты озадачил",
+    "ты удивила": "ты удивил",
+    "ты смутила": "ты смутил",
+    "ты порадовала": "ты порадовал",
+    "ты заставила": "ты заставил",
+    "ты напомнила": "ты напомнил",
+    "ты решила": "ты решил",
+    "ты выбрала": "ты выбрал",
+    "ты нашла": "ты нашел",
+    "ты сделала": "ты сделал",
+    "ты начала": "ты начал",
+    "ты занималась": "ты занимался",
+    "немного озадачила меня": "немного озадачил меня",
+    "сильно озадачила меня": "сильно озадачил меня",
+    "оза дачила меня": "озадачил меня",
+    "удивила меня": "удивил меня",
+    "смутила меня": "смутил меня",
+    "порадовала меня": "порадовал меня",
+    "заставила меня": "заставил меня",
 }
 
 
@@ -163,6 +234,8 @@ LIVE_STYLE_RULES = """
 Если пол пользователя не указан в памяти, не используй формы прошедшего времени с родом:
 "прислал", "прислала", "сказал", "сказала", "хотел", "хотела", "устал", "устала".
 Пиши нейтрально: "ты это отправляешь", "это от тебя", "что это было", "после такого стикера".
+Если в памяти пользователя указан мужской пол или сказано, что пользователь говорит о себе в мужском роде, используй только мужские формы: "ты прислал", "ты сказал", "ты хотел", "ты устал", "ты озадачил меня".
+Не используй к такому пользователю женские формы вроде "ты прислала", "ты сказала", "ты хотела", "ты устала", "ты озадачила меня".
 
 Примеры живого тона:
 - "Так. Это уже подозрительно."
@@ -367,59 +440,11 @@ def ask_gemini(
 
 
 
-    for attempt in range(3):
-
-
-        try:
-
-
-            response = client.models.generate_content(
-
-                model=MODEL,
-
-                contents=prompt
-
-            )
-
-
-            if response.text:
-
-
-                return clean_answer_style(
-                    response.text.strip()
-                )
-
-            log_ai_error(
-                "text_empty_response",
-                repr(response),
-                user_message
-            )
-
-
-
-        except Exception as e:
-
-
-            log_ai_error(
-                "text_exception",
-                repr(e),
-                user_message
-            )
-
-            print(
-                "Gemini ошибка:",
-                e
-            )
-
-            if is_location_unsupported_error(e):
-                return None
-
-
-            time.sleep(3)
-
-
-
-    return None
+    return generate_gemini_content(
+        prompt,
+        "text",
+        user_message
+    )
 
 
 def ask_gemini_short_fallback(user_message: str):
@@ -435,37 +460,11 @@ def ask_gemini_short_fallback(user_message: str):
 Ответ:
 """
 
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=prompt
-        )
-
-        if response.text:
-            return clean_answer_style(response.text.strip())
-
-        log_ai_error(
-            "short_fallback_empty_response",
-            repr(response),
-            user_message
-        )
-
-    except Exception as e:
-        log_ai_error(
-            "short_fallback_exception",
-            repr(e),
-            user_message
-        )
-
-        print(
-            "Gemini short fallback ошибка:",
-            e
-        )
-
-        if is_location_unsupported_error(e):
-            return None
-
-    return None
+    return generate_gemini_content(
+        prompt,
+        "short_fallback",
+        user_message
+    )
 
 
 def ask_openai_fallback(
@@ -610,45 +609,11 @@ def ask_gemini_with_image(
     ]
 
 
-    for attempt in range(3):
-
-
-        try:
-
-
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=contents
-            )
-
-
-            if response.text:
-                return clean_answer_style(
-                    response.text.strip()
-                )
-
-
-        except Exception as e:
-
-
-            log_ai_error(
-                "image_exception",
-                repr(e),
-                user_message
-            )
-
-            print(
-                "Gemini image ошибка:",
-                e
-            )
-
-            if is_location_unsupported_error(e):
-                return None
-
-            time.sleep(3)
-
-
-    return None
+    return generate_gemini_content(
+        contents,
+        "image",
+        user_message
+    )
 
 
 
@@ -710,45 +675,11 @@ def ask_gemini_with_images(
         )
 
 
-    for attempt in range(3):
-
-
-        try:
-
-
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=contents
-            )
-
-
-            if response.text:
-                return clean_answer_style(
-                    response.text.strip()
-                )
-
-
-        except Exception as e:
-
-
-            log_ai_error(
-                "images_exception",
-                repr(e),
-                user_message
-            )
-
-            print(
-                "Gemini images ошибка:",
-                e
-            )
-
-            if is_location_unsupported_error(e):
-                return None
-
-            time.sleep(3)
-
-
-    return None
+    return generate_gemini_content(
+        contents,
+        "images",
+        user_message
+    )
 
 
 # ==================================================
@@ -833,43 +764,10 @@ def ask_gemini_random_message(
 """
 
 
-    try:
-
-
-        response = client.models.generate_content(
-
-            model=MODEL,
-
-            contents=prompt
-
-        )
-
-
-        if response.text:
-
-
-            return clean_answer_style(
-                response.text.strip()
-            )
-
-
-
-    except Exception as e:
-
-
-        log_ai_error(
-            "random_message_exception",
-            repr(e)
-        )
-
-        print(
-            "Автосообщение Gemini ошибка:",
-            e
-        )
-
-
-
-    return None
+    return generate_gemini_content(
+        prompt,
+        "random_message"
+    )
 
 
 
