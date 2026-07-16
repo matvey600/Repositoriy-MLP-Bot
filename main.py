@@ -1294,6 +1294,79 @@ def build_photo_message(message):
     return "[Пользователь отправил фотографию]"
 
 
+def format_video_duration(seconds):
+    if not seconds:
+        return None
+
+    minutes = seconds // 60
+    rest_seconds = seconds % 60
+
+    if minutes:
+        return f"{minutes}:{rest_seconds:02d}"
+
+    return f"{rest_seconds} сек"
+
+
+def build_video_message(message):
+    video = message.video or message.animation
+
+    parts = [
+        "Пользователь отправил видео/эдит"
+    ]
+
+    if message.caption:
+        parts.append(
+            f"подпись: {message.caption}"
+        )
+
+    if video:
+        duration = format_video_duration(
+            getattr(video, "duration", None)
+        )
+
+        if duration:
+            parts.append(
+                f"длительность: {duration}"
+            )
+
+        width = getattr(video, "width", None)
+        height = getattr(video, "height", None)
+
+        if width and height:
+            parts.append(
+                f"размер: {width}x{height}"
+            )
+
+        file_name = getattr(video, "file_name", None)
+
+        if file_name:
+            parts.append(
+                f"файл: {file_name}"
+            )
+
+    return "[" + "; ".join(parts) + "]"
+
+
+async def download_media_thumbnail(media):
+    thumbnail = getattr(media, "thumbnail", None)
+
+    if not thumbnail:
+        return None, None
+
+    file = await bot.get_file(
+        thumbnail.file_id
+    )
+
+    buffer = BytesIO()
+
+    await bot.download_file(
+        file.file_path,
+        destination=buffer
+    )
+
+    return buffer.getvalue(), "image/jpeg"
+
+
 async def download_photo(message):
 
     if not message.photo:
@@ -1676,6 +1749,8 @@ async def all_messages(
 
     photo = message.photo
 
+    video = message.video or message.animation
+
     image_bytes = None
 
     image_mime_type = None
@@ -1779,6 +1854,22 @@ async def all_messages(
                 )
 
             return
+
+    elif video:
+
+        user_text = build_video_message(
+
+            message
+
+        )
+
+        image_bytes, image_mime_type = await download_media_thumbnail(
+
+            video
+
+        )
+
+        message_kind = "video"
 
     else:
 
