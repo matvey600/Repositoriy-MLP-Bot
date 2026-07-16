@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import time
 import json
+import re
 
 from datetime import datetime
 
@@ -87,7 +88,8 @@ def generate_gemini_content(contents, source, user_message=None):
 
             if response.text:
                 return clean_answer_style(
-                    response.text.strip()
+                    response.text.strip(),
+                    user_message
                 )
 
             log_ai_error(
@@ -162,7 +164,78 @@ USER_GENDER_REPLACEMENTS = {
 }
 
 
-def clean_answer_style(answer):
+FAREWELL_MARKERS = [
+    "пока",
+    "спокойной ночи",
+    "споки",
+    "доброй ночи",
+    "до завтра",
+    "я спать",
+    "я пошел спать",
+    "я пойду спать",
+    "прощай",
+    "увидимся"
+]
+
+PREMATURE_FAREWELL_PHRASES = [
+    "приятного тебе отдыха",
+    "приятного отдыха",
+    "хорошего отдыха",
+    "отдыхай",
+    "спокойной ночи",
+    "доброй ночи",
+    "до завтра"
+]
+
+
+def is_user_saying_goodbye(user_message):
+    if not user_message:
+        return False
+
+    lowered = str(user_message).lower()
+
+    return any(
+        marker in lowered
+        for marker in FAREWELL_MARKERS
+    )
+
+
+def remove_premature_farewell(answer, user_message):
+    if not answer or is_user_saying_goodbye(user_message):
+        return answer
+
+    lines = []
+
+    for line in answer.splitlines():
+        if not line.strip():
+            lines.append(line)
+            continue
+
+        pieces = re.split(r"(?<=[.!?])\s+", line)
+        kept_pieces = []
+
+        for piece in pieces:
+            lowered = piece.lower()
+
+            if any(
+                phrase in lowered
+                for phrase in PREMATURE_FAREWELL_PHRASES
+            ):
+                continue
+
+            kept_pieces.append(piece)
+
+        line = " ".join(kept_pieces).strip()
+
+        if not line:
+            continue
+
+        lines.append(line)
+
+    return "\n".join(lines).strip()
+
+
+def clean_answer_style(answer, user_message=None):
     if not answer:
         return answer
 
@@ -188,6 +261,11 @@ def clean_answer_style(answer):
 
     while "\n\n\n" in cleaned:
         cleaned = cleaned.replace("\n\n\n", "\n\n")
+
+    cleaned = remove_premature_farewell(
+        cleaned,
+        user_message
+    )
 
     return cleaned.strip()
 
@@ -217,6 +295,9 @@ LIVE_STYLE_RULES = """
 Не звучать как рассказчик из книги. Не пересказывай очевидное и не добавляй лишнюю красивость ради красивости.
 Пиши ближе к обычному Telegram: "а, поняла", "бывает", "я уж подумала", "ну тогда ладно", "ахаха, ясно".
 Если ответ можно дать одной живой фразой, дай одну живую фразу.
+Не воспринимай "спасибо", сердечко, короткую благодарность или паузу как прощание.
+Не желай отдыха, спокойной ночи, "до завтра" и не закрывай разговор, если пользователь прямо не сказал, что уходит, ложится спать или прощается.
+Если пользователь поправляет "мы еще не прощаемся", просто согласись и продолжай разговор без переигрывания и без резкой смены настроения.
 
 Если пользователь пишет коротко, часто достаточно 1-3 коротких предложений.
 Если пользователь шутит, провоцирует или кидает странный стикер, отвечай как в чате: живо, конкретно, без лекции.
