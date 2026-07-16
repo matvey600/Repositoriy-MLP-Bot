@@ -1,0 +1,18 @@
+[Unit]
+Description=MLPCompanion Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mlpcompanion
+Group=mlpcompanion
+WorkingDirectory=/opt/mlpcompanion
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/mlpcompanion/.venv/bin/python /opt/mlpcompanion/main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
