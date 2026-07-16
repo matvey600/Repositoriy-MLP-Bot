@@ -1246,6 +1246,27 @@ def build_sticker_message(sticker):
 
         )
 
+    set_name = (sticker.set_name or "").lower()
+
+    if any(
+        marker in set_name
+        for marker in [
+            "clop",
+            "bdsm",
+            "nsfw",
+            "18",
+            "horny"
+        ]
+    ):
+        parts.append(
+            "контекст: провокационный/пошлый стикерпак"
+        )
+
+    if sticker.is_video or sticker.is_animated:
+        parts.append(
+            "визуал: бот не видит саму анимацию, только emoji и название набора"
+        )
+
 
 
     return "[" + "; ".join(parts) + "]"
