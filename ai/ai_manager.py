@@ -1,5 +1,6 @@
 from google import genai
 from google.genai import types
+from openai import OpenAI
 from dotenv import load_dotenv
 
 import os
@@ -21,9 +22,17 @@ client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
+openai_client = None
+
+if os.getenv("OPENAI_API_KEY"):
+    openai_client = OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY")
+    )
+
 
 
 MODEL = "gemini-3.1-flash-lite"
+OPENAI_FALLBACK_MODEL = os.getenv("OPENAI_FALLBACK_MODEL", "gpt-5-mini")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AI_ERROR_LOG = os.path.join(BASE_DIR, "memory", "ai_errors.log")
@@ -47,6 +56,15 @@ def log_ai_error(source, error, user_message=None):
 
     except Exception:
         pass
+
+
+def is_location_unsupported_error(error):
+    text = str(error)
+
+    return (
+        "User location is not supported" in text
+        or "FAILED_PRECONDITION" in text
+    )
 
 CLICHE_REPLACEMENTS = {
     "дело житейское": "бывает",
@@ -393,6 +411,9 @@ def ask_gemini(
                 e
             )
 
+            if is_location_unsupported_error(e):
+                return None
+
 
             time.sleep(3)
 
@@ -438,6 +459,89 @@ def ask_gemini_short_fallback(user_message: str):
 
         print(
             "Gemini short fallback ошибка:",
+            e
+        )
+
+        if is_location_unsupported_error(e):
+            return None
+
+    return None
+
+
+def ask_openai_fallback(
+    user_message: str,
+    memory_context: str = "",
+    chat_history: str = "",
+    relationship_context: str = ""
+):
+    if not openai_client:
+        log_ai_error(
+            "openai_fallback_not_configured",
+            "OPENAI_API_KEY is missing",
+            user_message
+        )
+
+        return None
+
+    prompt = f"""
+Ты — Искорка из My Little Pony.
+
+Ты просто разговариваешь с пользователем в Telegram.
+
+ХАРАКТЕР:
+{TWILIGHT_PERSONALITY}
+
+ПАМЯТЬ:
+{memory_context}
+
+ОТНОШЕНИЯ:
+{relationship_context}
+
+ИСТОРИЯ:
+{chat_history}
+
+ПРАВИЛА СТИЛЯ:
+{LIVE_STYLE_RULES}
+
+Сообщение пользователя:
+{user_message}
+
+Ответь как Искорка. Обычно 1-4 предложения. Не говори, что основная модель недоступна.
+"""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model=OPENAI_FALLBACK_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        answer = response.choices[0].message.content
+
+        if answer:
+            return clean_answer_style(
+                answer.strip()
+            )
+
+        log_ai_error(
+            "openai_fallback_empty_response",
+            repr(response),
+            user_message
+        )
+
+    except Exception as e:
+        log_ai_error(
+            "openai_fallback_exception",
+            repr(e),
+            user_message
+        )
+
+        print(
+            "OpenAI fallback ошибка:",
             e
         )
 
@@ -527,10 +631,19 @@ def ask_gemini_with_image(
         except Exception as e:
 
 
+            log_ai_error(
+                "image_exception",
+                repr(e),
+                user_message
+            )
+
             print(
                 "Gemini image ошибка:",
                 e
             )
+
+            if is_location_unsupported_error(e):
+                return None
 
             time.sleep(3)
 
@@ -618,10 +731,19 @@ def ask_gemini_with_images(
         except Exception as e:
 
 
+            log_ai_error(
+                "images_exception",
+                repr(e),
+                user_message
+            )
+
             print(
                 "Gemini images ошибка:",
                 e
             )
+
+            if is_location_unsupported_error(e):
+                return None
 
             time.sleep(3)
 
@@ -735,6 +857,11 @@ def ask_gemini_random_message(
     except Exception as e:
 
 
+        log_ai_error(
+            "random_message_exception",
+            repr(e)
+        )
+
         print(
             "Автосообщение Gemini ошибка:",
             e
@@ -811,6 +938,16 @@ def ask_ai(
     print(
         "Все модели недоступны"
     )
+
+    fallback_answer = ask_openai_fallback(
+        user_message,
+        memory_context,
+        chat_history,
+        relationship_context
+    )
+
+    if fallback_answer:
+        return fallback_answer
 
     fallback_answer = ask_gemini_short_fallback(user_message)
 
