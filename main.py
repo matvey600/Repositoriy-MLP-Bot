@@ -1277,15 +1277,45 @@ async def download_static_sticker(sticker):
 
     if sticker.is_animated or sticker.is_video:
 
-        return None, None
+        return await download_media_thumbnail(
+
+            sticker
+
+        )
 
 
+
+    return await download_file_as_bytes(
+
+        sticker.file_id,
+
+        "image/webp"
+
+    )
+
+
+
+async def download_file_as_bytes(file_id, mime_type):
 
     file = await bot.get_file(
 
-        sticker.file_id
+        file_id
 
     )
+
+    file_path = file.file_path or ""
+
+    if file_path.lower().endswith(".webp"):
+
+        mime_type = "image/webp"
+
+    elif file_path.lower().endswith((".jpg", ".jpeg")):
+
+        mime_type = "image/jpeg"
+
+    elif file_path.lower().endswith(".png"):
+
+        mime_type = "image/png"
 
     buffer = BytesIO()
 
@@ -1297,7 +1327,7 @@ async def download_static_sticker(sticker):
 
     )
 
-    return buffer.getvalue(), "image/webp"
+    return buffer.getvalue(), mime_type
 
 
 def build_photo_message(message):
@@ -1374,18 +1404,10 @@ async def download_media_thumbnail(media):
     if not thumbnail:
         return None, None
 
-    file = await bot.get_file(
-        thumbnail.file_id
+    return await download_file_as_bytes(
+        thumbnail.file_id,
+        "image/jpeg"
     )
-
-    buffer = BytesIO()
-
-    await bot.download_file(
-        file.file_path,
-        destination=buffer
-    )
-
-    return buffer.getvalue(), "image/jpeg"
 
 
 async def download_photo(message):
