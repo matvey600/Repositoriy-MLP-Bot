@@ -1264,7 +1264,7 @@ def build_sticker_message(sticker):
 
     if sticker.is_video or sticker.is_animated:
         parts.append(
-            "визуал: бот не видит саму анимацию, только emoji и название набора"
+            "визуал: бот попробует посмотреть превью/первый кадр, если Telegram его отдаст"
         )
 
 
